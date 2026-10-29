@@ -20,7 +20,29 @@ const QUESTIONS = [
   "كي تكون زعفان، شنو لي يهدّيك؟",
   "شنو لي ما تحبهش في روتيننا؟",
   "قولي حاجة عمرك ما قلتهالي.",
-  "علاش اخترتني أنا؟"
+  "علاش اخترتني أنا؟",
+  "شنو أجرأ حاجة فكرت تديرها معايا؟",
+  "واش خطرت ليك فكرة عليا وحشمت تقولها؟",
+  "كي نكون قريب منك، شنو لي يخلي قلبك يدق؟",
+  "شنو أكثر لبسة عليا تعجبك؟",
+  "واش شفت حلم عليا؟ حكيهولي.",
+  "أول حاجة تفكر فيها كي تشوفني؟",
+  "من 10، شحال تعطي لبوسي؟ ولماذا؟",
+  "واش تغار كي واحد آخر يهدر معايا؟",
+  "شنو أكثر وقت تشتاقلي فيه؟",
+  "لو تقدر تبدل حاجة في أول لقاء لينا، شنو تبدل؟",
+  "واش سبق وقلت ليا حاجة وما كنتش تقصدها؟",
+  "شنو الحاجة لي تتمنى نديرها أكثر؟",
+  "من منا الأكثر غيرة وعلاش؟",
+  "شنو أغرب حاجة في مخك تفكر فيها عليا؟",
+  "واش تحس بلي تعرفني بزاف ولا مازال فيا أسرار؟",
+  "لو نغيب عليك أسبوع، شنو يصرالك؟",
+  "شنو هي أكبر غلطة درتها معايا؟",
+  "علاش بدلتي رايك فيا من أول؟",
+  "واش خبيت عليا حاجة دبا؟",
+  "اختار: نهدر معاك ساعة في التيليفون ولا نشوفك دقيقة؟ علاش؟",
+  "شنو الحاجة لي تحب نقولها ليك كل نهار؟",
+  "كلمة وحدة تلخص حبك ليا؟"
 ];
 
 const rooms = {};
@@ -82,7 +104,9 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/api/next" && req.method === "POST") {
     const b = await body(req);
     const r = rooms[clean(b.room).toLowerCase()];
-    if (r && b.i === r.i) { r.i++; r.answers = {}; }
+    if (r && b.i === r.i && (!b.auto || Date.now() - (r.last || 0) > 8000)) {
+      r.i++; r.answers = {}; r.last = Date.now();
+    }
     return send(res, { ok: true });
   }
   res.writeHead(404); res.end("Not found");
@@ -159,15 +183,29 @@ $("name").value=me;$("room").value=room;
 
 function post(u,d){return fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(r){return r.json()})}
 
-$("go").onclick=function(){
+var joined=false;
+function stateUrl(){return "/api/state?room="+encodeURIComponent(room)+"&name="+encodeURIComponent(me)}
+function skipIfFree(){
+  return fetch(stateUrl()).then(function(r){return r.json()}).then(function(s){
+    if(s.error)return;
+    if(s.answered.length===0||s.answers)return post("/api/next",{room:room,i:s.i,auto:true});
+  }).catch(function(){});
+}
+function enter(){
   me=$("name").value.trim();room=$("room").value.trim();
   post("/api/join",{name:me,room:room}).then(function(r){
     if(r.error){$("err").textContent=r.error;return}
     try{localStorage.setItem("n",me);localStorage.setItem("r",room)}catch(e){}
     $("join").classList.add("hide");$("game").classList.remove("hide");
-    poll();timer=setInterval(poll,1500);
+    joined=true;
+    skipIfFree().then(function(){poll();timer=setInterval(poll,1500)});
   });
-};
+}
+$("go").onclick=enter;
+if(me&&room)enter();
+document.addEventListener("visibilitychange",function(){
+  if(!document.hidden&&joined)skipIfFree().then(poll);
+});
 
 $("send").onclick=function(){
   var t=$("text").value.trim();if(!t)return;
@@ -200,7 +238,7 @@ function drawMsgs(list){
 $("next").onclick=function(){post("/api/next",{room:room,i:cur}).then(poll)};
 
 function poll(){
-  fetch("/api/state?room="+encodeURIComponent(room)+"&name="+encodeURIComponent(me))
+  fetch(stateUrl())
   .then(function(r){return r.json()}).then(function(s){
     if(s.error)return;
     if(s.i!==cur){cur=s.i;$("text").value="";$("send").disabled=false}
