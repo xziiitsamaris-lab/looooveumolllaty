@@ -160,6 +160,7 @@ button:disabled{opacity:.5}
 
 <section id="game" class="hide">
   <div class="meta"><span id="who"></span><span id="num"></span></div>
+  <button id="leave" style="background:transparent;color:var(--soft);border:1px solid #7d2a4a;padding:8px;font-size:.95rem">تبديل الاسم / الغرفة</button>
   <div class="q" id="q"></div>
   <div id="write" style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
     <textarea id="text" placeholder="جاوب بصراحة..."></textarea>
@@ -202,7 +203,15 @@ function enter(){
   });
 }
 $("go").onclick=enter;
-if(me&&room)enter();
+function leave(){
+  clearInterval(timer);joined=false;cur=-1;shown=0;
+  try{localStorage.removeItem("n");localStorage.removeItem("r")}catch(e){}
+  $("game").classList.add("hide");$("join").classList.remove("hide");
+  $("name").value="";$("room").value="";$("err").textContent="";
+}
+$("leave").onclick=leave;
+if(location.search.indexOf("reset")>-1){try{localStorage.removeItem("n");localStorage.removeItem("r")}catch(e){}$("name").value="";$("room").value=""}
+else if(me&&room)enter();
 document.addEventListener("visibilitychange",function(){
   if(!document.hidden&&joined)skipIfFree().then(poll);
 });
