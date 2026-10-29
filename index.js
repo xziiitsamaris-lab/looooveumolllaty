@@ -42,7 +42,7 @@ const server = http.createServer(async (req, res) => {
     const b = await body(req);
     const room = clean(b.room).toLowerCase(), name = clean(b.name);
     if (!room || !name) return send(res, { error: "عمر الاسم و الكود" }, 400);
-    const r = (rooms[room] = rooms[room] || { players: [], qs: shuffle(QUESTIONS.map((_, i) => i)), i: 0, answers: {} });
+    const r = (rooms[room] = rooms[room] || { players: [], qs: shuffle(QUESTIONS.map((_, i) => i)), i: 0, answers: {}, msgs: [] });
     if (!r.players.includes(name)) {
       if (r.players.length >= 2) return send(res, { error: "الغرفة عامرة، اختار كود آخر" }, 400);
       r.players.push(name);
@@ -60,6 +60,7 @@ const server = http.createServer(async (req, res) => {
       i: r.i,
       answered: Object.keys(r.answers),
       mine: r.answers[me],
+      msgs: r.msgs,
       answers: both ? r.answers : null
     });
   }
@@ -68,6 +69,14 @@ const server = http.createServer(async (req, res) => {
     const r = rooms[clean(b.room).toLowerCase()];
     if (!r || !r.players.includes(b.name) || !clean(b.text)) return send(res, { error: "غلط" }, 400);
     if (r.answers[b.name] === undefined) r.answers[b.name] = clean(b.text);
+    return send(res, { ok: true });
+  }
+  if (url.pathname === "/api/chat" && req.method === "POST") {
+    const b = await body(req);
+    const r = rooms[clean(b.room).toLowerCase()];
+    if (!r || !r.players.includes(b.name) || !clean(b.text)) return send(res, { error: "غلط" }, 400);
+    r.msgs.push({ n: b.name, t: clean(b.text) });
+    if (r.msgs.length > 200) r.msgs.shift();
     return send(res, { ok: true });
   }
   if (url.pathname === "/api/next" && req.method === "POST") {
@@ -105,6 +114,15 @@ button:disabled{opacity:.5}
 .err{color:#ffb3bd;text-align:center;min-height:1.2em}
 .wait{text-align:center;color:var(--soft)}
 .hide{display:none}
+#chat{margin-top:22px;border-top:1px solid #7d2a4a;padding-top:14px}
+#chat h2{margin:0 0 10px;font-size:1.1rem;color:var(--soft)}
+#msgs{height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px}
+.m{max-width:80%;padding:9px 13px;border-radius:16px;background:var(--card);align-self:flex-start;line-height:1.4;word-break:break-word}
+.m.me{align-self:flex-end;background:var(--hot);color:#2a0615}
+.m small{display:block;opacity:.7;font-size:.75rem;margin-bottom:2px}
+#cbar{display:flex;gap:8px;margin-top:10px}
+#cbar input{flex:1}
+#cbar button{padding:0 18px}
 </style></head><body><main>
 <h1>مصارحة 💕</h1>
 <p class="sub">لعبة صدق بين زوج</p>
@@ -126,6 +144,11 @@ button:disabled{opacity:.5}
   <p class="wait hide" id="wait"></p>
   <div id="reveal" class="hide" style="display:flex;flex-direction:column;gap:12px;margin-top:16px"></div>
   <button id="next" class="hide" style="margin-top:12px">السؤال الجاي</button>
+  <div id="chat">
+    <h2>الدردشة 💬</h2>
+    <div id="msgs"></div>
+    <div id="cbar"><input id="ctext" placeholder="اكتب رسالة..." autocomplete="off"><button id="csend">ابعث</button></div>
+  </div>
 </section>
 </main>
 <script>
@@ -152,6 +175,28 @@ $("send").onclick=function(){
   post("/api/answer",{name:me,room:room,text:t}).then(poll);
 };
 
+function sendChat(){
+  var t=$("ctext").value.trim();if(!t)return;
+  $("ctext").value="";
+  post("/api/chat",{name:me,room:room,text:t}).then(poll);
+}
+$("csend").onclick=sendChat;
+$("ctext").onkeydown=function(e){if(e.key==="Enter")sendChat()};
+var shown=0;
+function drawMsgs(list){
+  if(list.length===shown)return;
+  var box=$("msgs");var atEnd=box.scrollHeight-box.scrollTop-box.clientHeight<60;
+  box.innerHTML="";
+  list.forEach(function(m){
+    var d=document.createElement("div");d.className="m"+(m.n===me?" me":"");
+    var sm=document.createElement("small");sm.textContent=m.n;
+    var tx=document.createElement("span");tx.textContent=m.t;
+    d.appendChild(sm);d.appendChild(tx);box.appendChild(d);
+  });
+  shown=list.length;
+  if(atEnd||true)box.scrollTop=box.scrollHeight;
+}
+
 $("next").onclick=function(){post("/api/next",{room:room,i:cur}).then(poll)};
 
 function poll(){
@@ -159,6 +204,7 @@ function poll(){
   .then(function(r){return r.json()}).then(function(s){
     if(s.error)return;
     if(s.i!==cur){cur=s.i;$("text").value="";$("send").disabled=false}
+    drawMsgs(s.msgs||[]);
     $("who").textContent=s.players.join(" 💕 ");
     $("num").textContent="سؤال "+(s.i+1);
     $("q").textContent=s.q;
